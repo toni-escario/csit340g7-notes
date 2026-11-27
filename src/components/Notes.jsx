@@ -1,36 +1,43 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import NoteCard from './NoteCard.jsx'
 
-const startingNotes = [
-  {
-    id: 1,
-    title: "Review map and filter",
-    body: "Redo the TodoMVC steps without looking at the guide."
-  },
-  {
-    id: 2,
-    title: "Prepare for the quiz",
-    body: "Practice writing one handler for many inputs."
-  }
-]
+const API_URL = import.meta.env.VITE_API_URL
 
 function Notes() {
-  const [notes, setNotes] = useState(() => {
-    const saved = localStorage.getItem('notes')
-    return saved ? JSON.parse(saved) : startingNotes
-  })
+  const [notes, setNotes] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   const [formData, setFormData] = useState(() => {
-  const saved = localStorage.getItem('draft')
-  return saved ? JSON.parse(saved) : { title: '', body: '' }
-})
+    const saved = localStorage.getItem('draft')
+    return saved ? JSON.parse(saved) : { title: '', body: '' }
+  })
 
   const [searchQuery, setSearchQuery] = useState('')
   const titleRef = useRef(null)
 
   useEffect(() => {
-    localStorage.setItem('notes', JSON.stringify(notes))
-  }, [notes])
+    let ignore = false
+
+    async function loadNotes() {
+      try {
+        const res = await fetch(API_URL + '/notes')
+        if (!res.ok) {
+          throw new Error('The server answered ' + res.status)
+        }
+        const data = await res.json()
+        if (!ignore) setNotes(data)
+      } catch (err) {
+        if (!ignore) setError(err.message)
+      }
+      if (!ignore) setLoading(false)
+    }
+
+    loadNotes()
+    return () => {
+      ignore = true
+    }
+  }, [])
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -47,7 +54,7 @@ function Notes() {
     }))
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
 
     const trimmedTitle = formData.title.trim()
@@ -55,20 +62,27 @@ function Notes() {
 
     if (!trimmedTitle || !trimmedBody) return
 
-    const newNote = {
-      id: Date.now(),
-      title: trimmedTitle,
-      body: trimmedBody
+    try {
+      const res = await fetch(API_URL + '/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: trimmedTitle, body: trimmedBody }),
+      })
+      if (!res.ok) {
+        throw new Error('The server answered ' + res.status)
+      }
+      const newNote = await res.json()
+      setNotes((prevNotes) => [...prevNotes, newNote])
+
+      setFormData({
+        title: '',
+        body: ''
+      })
+
+      titleRef.current.focus()
+    } catch (err) {
+      setError(err.message)
     }
-
-    setNotes((prevNotes) => [...prevNotes, newNote])
-
-    setFormData({
-      title: '',
-      body: ''
-    })
-
-    titleRef.current.focus()
   }
 
   const handleDelete = useCallback((idToDelete) => {
@@ -143,7 +157,9 @@ function Notes() {
           ))}
         </ul>
 
-        {filteredNotes.length === 0 && (
+        {loading && <p className="text-lg text-[#949494]">Loading notes...</p>}
+        {error && <p className="text-lg text-[#b83f45]">{error}</p>}
+        {!loading && !error && filteredNotes.length === 0 && (
           <p className="text-lg text-[#949494]">No notes found</p>
         )}
       </section>

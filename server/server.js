@@ -1,4 +1,5 @@
 import express from 'express'
+import cors from 'cors'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -6,9 +7,8 @@ const supabase = createClient(
   process.env.SUPABASE_SECRET_KEY
 )
 
-console.log('key check:', JSON.stringify(process.env.SUPABASE_SECRET_KEY?.slice(0, 14)), process.env.SUPABASE_SECRET_KEY?.length)
-
 const app = express()
+app.use(cors({ origin: 'http://localhost:5173' }))
 
 app.get('/notes', async (req, res) => {
   const { data, error } = await supabase.from('notes').select().order('id')
